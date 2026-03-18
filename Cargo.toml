@@ -1,0 +1,12 @@
+[package]
+name = "arb_inspector_next"
+version = "0.1.0"
+authors = ["Dere"]
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+
+[[bin]]
+name = "arb_inspector"
+path = "src/main.rs"
