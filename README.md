@@ -12,11 +12,12 @@ A lightweight tool to extract Anti-Rollback (ARB) version from Qualcomm ELF firm
 
 ## Usage
 ```
-arb_inspector_next [--debug] [--quick|--full] <image>
+arb_inspector_next [--debug] [--quick|--full] [-v] <image>
 ```
 - `--debug`   : enable verbose debug output
 - `--quick`   : output only ARB version (default)
 - `--full`    : output complete image information
+- `-v`        : show version and exit
 
 ## Build
 ```bash

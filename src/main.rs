@@ -2,6 +2,8 @@ use std::env;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 const ELF_MAGIC: &[u8; 4] = b"\x7fELF";
 const EI_CLASS: usize = 4;
 const EI_DATA: usize = 5;
@@ -659,12 +661,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 full_mode = true;
                 i += 1;
             }
+            "--version" | "-v" => {
+                println!("arb_inspector_next version {}", VERSION);
+                return Ok(());
+            }
             _ => {
                 if path.is_none() {
                     path = Some(args[i].clone());
                     i += 1;
                 } else {
-                    eprintln!("Usage: {} [--debug] [--quick|--full] <image>", args[0]);
+                    eprintln!("Usage: {} [--debug] [--quick|--full] [-v] <image>", args[0]);
                     std::process::exit(1);
                 }
             }
@@ -678,7 +684,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = match path {
         Some(p) => p,
         None => {
-            eprintln!("Usage: {} [--debug] [--quick|--full] <image>", args[0]);
+            eprintln!("Usage: {} [--debug] [--quick|--full] [-v] <image>", args[0]);
             std::process::exit(1);
         }
     };
@@ -710,8 +716,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut full_data = Vec::new();
             file.read_to_end(&mut full_data)?;
 
+            if debug {
+                eprintln!("[DEBUG] Full ELF size: {} bytes", full_data.len());
+            }
+
             let elf_with_hash = ElfWithHashTableSegment::from_bytes(&full_data)?;
+
+            if debug {
+                if let Some(hdr) = elf_with_hash.elf.elf_header() {
+                    eprintln!("[DEBUG] ELF entry: 0x{:x}", hdr.e_entry());
+                    eprintln!("[DEBUG] Program header offset: 0x{:x}", hdr.e_phoff());
+                    eprintln!("[DEBUG] Program header count: {}", hdr.e_phnum());
+                    eprintln!("[DEBUG] Program header size: {} bytes", hdr.e_phentsize());
+                }
+
+                let phdrs = elf_with_hash.elf.phdrs();
+                for (i, ph) in phdrs.iter().enumerate() {
+                    eprintln!("[DEBUG] PH[{}]: type={:#x} offset=0x{:x} filesz=0x{:x} flags={:#x}",
+                        i, ph.p_type(), ph.p_offset(), ph.p_filesz(), ph.p_flags());
+                }
+            }
+
             let arb = elf_with_hash.get_arb_version();
+
+            if debug {
+                if let Some(ht) = &elf_with_hash.hash_table_header {
+                    eprintln!("[DEBUG] Found HASH segment header:");
+                    eprintln!("[DEBUG]   version: {}", ht.version);
+                    eprintln!("[DEBUG]   common_metadata_size: {}", ht.common_metadata_size);
+                    eprintln!("[DEBUG]   oem_metadata_size: {}", ht.oem_metadata_size);
+                    eprintln!("[DEBUG]   hash_table_size: {}", ht.hash_table_size);
+                } else {
+                    eprintln!("[DEBUG] No HASH segment header found");
+                }
+
+                if let Some(arb_val) = arb {
+                    eprintln!("[DEBUG] Extracted ARB: {}", arb_val);
+                }
+            }
 
             if quick_mode {
                 if let Some(arb_val) = arb {
@@ -767,13 +809,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Anti-Rollback Version: not present");
                 }
             }
-
-            if debug && full_mode {
-                if let Some(ht) = &elf_with_hash.hash_table_header {
-                    eprintln!("[DEBUG] Hash table version: {}", ht.version);
-                    eprintln!("[DEBUG] OEM metadata size: {}", ht.oem_metadata_size);
-                }
-            }
         }
 
         FileType::Mbn => {
@@ -784,7 +819,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut full_data = Vec::new();
             file.read_to_end(&mut full_data)?;
 
+            if debug {
+                eprintln!("[DEBUG] Full MBN size: {} bytes", full_data.len());
+            }
+
             let mbn = Mbn::from_bytes(&full_data)?;
+
+            if debug {
+                eprintln!("[DEBUG] MBN version: {}", mbn.header.version);
+                eprintln!("[DEBUG] Image ID: 0x{:x}", mbn.header.image_id);
+                eprintln!("[DEBUG] Code size: {}", mbn.header.code_size);
+                eprintln!("[DEBUG] Image size: {}", mbn.header.image_size);
+                eprintln!("[DEBUG] Signature ptr: 0x{:x}", mbn.header.sig_ptr);
+                eprintln!("[DEBUG] Signature size: {}", mbn.header.sig_size);
+                eprintln!("[DEBUG] Certificate chain ptr: 0x{:x}", mbn.header.cert_chain_ptr);
+                eprintln!("[DEBUG] Certificate chain size: {}", mbn.header.cert_chain_size);
+            }
 
             if quick_mode {
                 println!("MBN format does not contain ARB field");
@@ -797,11 +847,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Signature ptr: 0x{:x}, size: {}", mbn.header.sig_ptr, mbn.header.sig_size);
                 println!("Certificate chain ptr: 0x{:x}, size: {}", mbn.header.cert_chain_ptr, mbn.header.cert_chain_size);
                 println!("ARB: not applicable");
-            }
-
-            if debug && full_mode {
-                eprintln!("[DEBUG] MBN version: {}", mbn.header.version);
-                eprintln!("[DEBUG] Code size: {}", mbn.header.code_size);
             }
         }
 
